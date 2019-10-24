@@ -81,64 +81,35 @@ char *read_line()
 struct tuple
 {
     int length;
-    char* cmd_type;
-    char** tuple;
+    char** s_tuple;
 };
-
-struct variable
-{
-    char* var;
-    char* value;
-};
-
-// int check_var(char* token)
-// {
-//     int i = 0;
-//     while(token[i]){i++;}
-//     if(i >= 3)
-//     {
-//         if(token[0]!="\"")
-//         {
-//             return 1;
-//         }
-//         return 0;
-//     }
-//     else{return 0;}
-// }
-
 
 int main()
 {
     char* line;
     char** args;
-
-    struct tuple tuple_space[2000];
-    int tuple_pos = 0;
+    int cmd_no = 0;
 
     int thread_num;
     printf("Input Number of Thread:");
     line = read_line();
-    thread_num = atoi(line);
+    thread_num = atoi(line)+1;
     printf("Thread num: %d\n", thread_num);
-    omp_set_dynamic(0);
     omp_set_num_threads(thread_num);
 
-    //--Initialize thread tuple array------------------
-    struct tuple thread_tuple_array[thread_num];//Record every thread's cmd
-    for(int i = 0; i < thread_num; i++)
+    struct tuple tuple_space[2000];
+    memset(&tuple_space, 0, 2000*sizeof(struct tuple));
+    for(int i = 0; i < 2000; i++)
     {
-        thread_tuple_array[i].length = -1;
-        thread_tuple_array[i].cmd_type = NULL;
-        thread_tuple_array[i].tuple = NULL;
+        tuple_space[i].length = -1;
+        tuple_space[i].s_tuple = NULL;
     }
-    //-------------------------------------------------
 
-    #pragma omp parallel
+    do
     {
-        do
+        #pragma omp parallel
         {
             int tid = omp_get_thread_num();
-            printf("Thread number: %d\n", tid);
 
             if(tid == 0)//Server thread
             {
@@ -155,58 +126,63 @@ int main()
 
                 //--Record tid&cmd----------------------------
                 int thread_id = atoi(args[0]);
-                char* thread_cmd = args[1];
+                char* thread_cmd;
+                if(args[1]){thread_cmd = args[1];}
+                else{exit(0);}
+                #ifdef dbg
                 printf("Tuple thread id: %d\n", thread_id);
                 printf("Tuple cmd: %s\n", thread_cmd);
+                #endif
                 //--------------------------------------------
-
+                
                 //--Record cmd tuple--------------------------
                 int tuple_length = cmd_length-2;
-                char* cmd_tuple[tuple_length];//Get rid of tid and cmd
+                char* cmd_tuple[tuple_length+1];
                 for(int i = 2; i < cmd_length; i++)
                 {
                     cmd_tuple[i-2] = args[i];
+                    #ifdef dbg
                     printf("Tuple parameter: %s\n", cmd_tuple[i-2]);
+                    #endif
                 }
+                cmd_tuple[tuple_length] = 0;
                 //--------------------------------------------
 
-                //--Decide action-----------------------------
-                if(thread_cmd == "out")//Server thread change tuple space directly
+                if(strcmp(thread_cmd, "out") == 0)
                 {
-                    tuple_space[tuple_pos].length = tuple_length;
-                    tuple_space[tuple_pos].cmd_type = thread_cmd;
-                    tuple_space[tuple_pos].tuple = cmd_tuple;
-                    tuple_pos ++;
-                    tuple_pos /= 2000;
-                }
-                else if(thread_cmd == "in")//Server thread store cmd to thread tuple array
-                {
-                    if(thread_tuple_array[thread_id].length == -1)
+                    for(int i = 0; i < 2000; i++)
                     {
-                        thread_tuple_array[thread_id].length = tuple_length;
-                        thread_tuple_array[thread_id].cmd_type = "in";
-                        thread_tuple_array[thread_id].tuple = cmd_tuple;
+                        if(tuple_space[i].length == -1)
+                        {
+                            tuple_space[i].length = tuple_length;
+                            for(int j = 0; j <= tuple_length; j++)
+                            {
+                                printf("j: %d\n", j);
+                                tuple_space[i].s_tuple[j] = cmd_tuple[j];
+                            }
+                            
+                            break;
+                        }
                     }
                 }
-                else if(thread_cmd == "read")
+                for(int i = 0; i < 2000; i++)
                 {
-                    thread_tuple_array[thread_id].length = tuple_length;
-                    thread_tuple_array[thread_id].cmd_type = "read";
-                    thread_tuple_array[thread_id].tuple = cmd_tuple;
+                    if(tuple_space[i].length != -1)
+                    {
+                        int j = 0;
+                        printf("(");
+                        while(tuple_space[i].s_tuple[j])
+                        {
+                            if(j == 0){printf("%s", tuple_space[i].s_tuple[j]);}
+                            else{printf(", %s", tuple_space[i].s_tuple[j]);}
+                            j++;
+                        }
+                        printf(")\n");
+                    }
                 }
-                else
-                {
-                    printf("Unknown command.\n");
-                }
-                
-                //--------------------------------------------
             }
-            else
-            {
-                
-            }
-            
-        } while (strcmp(line, "exit") != 0);
-    }
+        }
+    } while (strcmp(line, "exit") != 0);
+    
     return 0;
 }
