@@ -43,7 +43,7 @@ string tuple2string(struct stuple tuple)
 
 void show_tuple_space(vector <stuple> tuple_space)
 {
-    printf("------------TUPLE SPACE------------\n");
+    printf("-----------------------------------\n");
     for(int i = 0; i < 2000; i++)
     {
         if(tuple_space[i].length != -1)
@@ -54,18 +54,6 @@ void show_tuple_space(vector <stuple> tuple_space)
     }
     printf("-----------------------------------\n");
 }
-
-void show_var_table(vector <variable> var_table)
-{
-    printf("-------------VAR TABLE-------------\n");
-    printf("------VAR---------------VALUE------\n");
-    for(int i = 0; i < var_table.size();i++)
-    {
-        printf("%5s              %5s\n", var_table[i].name.c_str(), var_table[i].value.c_str());
-    }
-    printf("-----------------------------------\n");
-}
-
 
 int main()
 {
@@ -78,7 +66,6 @@ int main()
     omp_set_num_threads(thread_num+1);
 
     vector <stuple> tuple_space(2000);
-    vector <variable> var_table;
     vector <thread_cmd> wait_cmd;
     vector <string> thread_rw_tuple(thread_num+1);
 
@@ -88,43 +75,29 @@ int main()
             int tid = omp_get_thread_num();
             if(tid == 0)
             {
-                string thread_no;
-                string cmd;
-                vector <string> thread_tuple;
                 show_tuple_space(tuple_space);
-                printf("\n");
-                show_var_table(var_table);
+                printf("> ");
+                getline(cin, line);
+                 
+                stringstream check1(line); 
+                string intermediate; 
+                //--Parse line------------------------------------
+                string thread_no;
+                check1 >>  thread_no;
 
-                if(wait_cmd.size()==0)
-                {
-                    printf("> ");
-                    getline(cin, line);
-                    stringstream check1(line); 
-                    string intermediate; 
-                    //--Parse line------------------------------------
-                    check1 >> thread_no;
-                    check1 >> cmd;
-                    while(check1 >> intermediate) 
-                    { 
-                        thread_tuple.push_back(intermediate); 
-                    }
-                }
-                else
-                {
-                    for(int i = 0; i < wait_cmd.size(); i++)
-                    {
-                        thread_no = wait_cmd[i].thread_no;
-                        cmd = wait_cmd[i].cmd;
-                        thread_tuple = wait_cmd[i].cmd_tuple;
-                    }
-                }
                 //--Convert thread no from str to int-------------
                 istringstream sno2no(thread_no);
                 int th_no = 0;
                 sno2no >> th_no;
                 //------------------------------------------------
-                
-                
+
+                string cmd;
+                check1 >> cmd;
+                vector <string> thread_tuple;
+                while(check1 >> intermediate) 
+                { 
+                    thread_tuple.push_back(intermediate); 
+                }
                 vector <int> var_pos;
                 for(int i = 0; i < thread_tuple.size(); i++)
                 {
@@ -132,8 +105,14 @@ int main()
                     {
                         var_pos.push_back(i);
                     }
+                    printf("1st: %s\n", thread_tuple[i].substr(0, 1).c_str());
                 }
 
+                //------------------------------------------------
+                // struct thread_cmd th_cmd;
+                // th_cmd.thread_no = thread_no;
+                // th_cmd.cmd_tuple = thread_tuple;
+                // th_cmd.cmd = cmd;
 
                 if(cmd == "out")
                 {
