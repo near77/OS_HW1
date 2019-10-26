@@ -4,6 +4,7 @@
 #include <sstream>
 #include <omp.h>
 #include <cstring>
+#include <fstream>
 using namespace std;
 
 struct stuple
@@ -29,7 +30,7 @@ struct thread_cmd
     vector <string> cmd_tuple;
 };
 
-vector <stuple> tuple_space(2000);
+vector <stuple> tuple_space;
 vector <variable> var_table;
 vector <thread_cmd> wait_cmd;
 
@@ -48,7 +49,7 @@ string tuple2string(struct stuple tuple)
 void show_tuple_space(vector <stuple> tuple_space)
 {
     printf("------------TUPLE SPACE------------\n");
-    for(int i = 0; i < 2000; i++)
+    for(int i = 0; i < tuple_space.size(); i++)
     {
         if(tuple_space[i].length != -1)
         {
@@ -65,7 +66,7 @@ void show_var_table(vector <variable> var_table)
     printf("------VAR---------------VALUE------\n");
     for(int i = 0; i < var_table.size();i++)
     {
-        printf("%8s              %5s\n", var_table[i].name.c_str(), var_table[i].value.c_str());
+        printf("%8s            %8s\n", var_table[i].name.c_str(), var_table[i].value.c_str());
     }
     printf("-----------------------------------\n");
 }
@@ -75,12 +76,12 @@ void show_thcmd_buffer(vector <thread_cmd> wait_cmd)
     printf("---------THREAD CMD BUFFER---------\n");
     for(int i = 0; i < wait_cmd.size(); i++)
     {
-        printf("%s %s \n", wait_cmd[i].thread_no.c_str(), wait_cmd[i].cmd.c_str());
+        printf("[%s %s ", wait_cmd[i].thread_no.c_str(), wait_cmd[i].cmd.c_str());
         for(int j = 0; j < wait_cmd[i].cmd_tuple.size();j++)
         {
-            printf("%s", wait_cmd[i].cmd_tuple[j].c_str());
+            printf("%s ", wait_cmd[i].cmd_tuple[j].c_str());
         }
-        printf("\n");
+        printf("]\n");
     }
     printf("-----------------------------------\n");
 }
@@ -135,7 +136,17 @@ bool search_q_var(vector <string> &thread_tuple)
             struct variable var1;
             var1.name = thread_tuple[q_var_pos[i]].substr(1,strlen(thread_tuple[q_var_pos[i]].c_str()));
             var1.value = tuple_space[target_pos].s_tuple[q_var_pos[i]];
-            var_table.push_back(var1);
+            int var_exist = 0;
+            for(int j = 0; j < var_table.size(); j++)
+            {
+                if(var1.name == var_table[j].name)
+                {
+                    var_exist = 1;
+                    var_table[j].value = var1.value;
+                    break;
+                }
+            }
+            if(var_exist == 0){var_table.push_back(var1);}
         }
         return true;
     }
@@ -190,7 +201,6 @@ int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector 
     thread_tuple = replace_var(thread_tuple);
     if(thread_tuple.size() == 0){return -1;}
     if(!search_q_var(thread_tuple)){return -1;}
-
     //--Convert thread no from str to int-------------
     istringstream sno2no(thread_no);
     int th_no = 0;
@@ -199,25 +209,21 @@ int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector 
     if(cmd == "out")
     {
         //--Find an empty space to store tuple-------------------
-        for(int i = 0; i < 2000; i++)
-        {
-            if(tuple_space[i].length == -1)
-            {
-                tuple_space[i].length = thread_tuple.size();
-                tuple_space[i].s_tuple = thread_tuple;
-                break;
-            }
-        }
+        struct stuple out_tuple;
+        out_tuple.length = thread_tuple.size();
+        out_tuple.s_tuple = thread_tuple;
+        tuple_space.push_back(out_tuple);
         //-------------------------------------------------------
     }
     else if(cmd == "read" || cmd == "in")
     {
+        int if_match = 0;
         //--Check if there exist target tuple--------------------
-        for(int i = 0 ; i < 2000; i++)
+        for(int i = 0 ; i < tuple_space.size(); i++)
         {
             if(thread_tuple.size() == tuple_space[i].length)
             {
-                int if_match = 1;
+                if_match = 1;
                 for(int j = 0; j < thread_tuple.size(); j++)
                 {
                     if(thread_tuple[j][0] == '?'){continue;}
@@ -233,11 +239,13 @@ int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector 
                     thread_rw_buffer[th_no] = th_tuple;//Put tuple string in thread buffer to write file
                     if(cmd == "in")
                     {
-                        tuple_space[i].length = -1;//Erase tuple space
+                        tuple_space.erase(tuple_space.begin()+i);//Erase tuple space
                     }
+                    break;
                 }
             }
         }
+        if(if_match == 0){return -1;}
         //------------------------------------------------------
     }
     else
@@ -250,12 +258,30 @@ int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector 
 int main()
 {
     string line;
-    printf("> ");
+    printf("Client thread number > ");
     int thread_num;
     cin >> thread_num;
     getline(cin, line);
     printf("Thread num: %d\n", thread_num+1);
     omp_set_num_threads(thread_num+1);
+    vector <string> file_name_table;
+    for(int i = 0; i <= thread_num; i++)
+    {
+        string file_name;
+        if(i == 0)
+        {
+            file_name = "Server.txt";
+        }
+        else
+        {
+            stringstream tmp;
+            file_name = to_string(i) + ".txt"; 
+        }
+        ofstream file;
+        file.open(file_name.c_str());
+        file_name_table.push_back(file_name);
+    }
+
     vector <string> thread_rw_buffer(thread_num+1);
     int status;
     #pragma omp parallel
@@ -268,11 +294,8 @@ int main()
                 string thread_no;
                 string cmd;
                 vector <string> thread_tuple;
-                show_tuple_space(tuple_space);
-                printf("\n");
-                show_var_table(var_table);
-                printf("\n");
-                show_thcmd_buffer(wait_cmd);
+
+                int tuple_space_size = tuple_space.size();
 
                 for(int i = 0; i < wait_cmd.size(); i++)
                 {
@@ -280,31 +303,38 @@ int main()
                     cmd = wait_cmd[i].cmd;
                     thread_tuple = wait_cmd[i].cmd_tuple;
                     status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer);
-                    if(status)
+                    if(status == 1)
                     {
                         wait_cmd.erase(wait_cmd.begin()+i);
                         i--;
                     }
-                }            
+                }
+                if(tuple_space.size() == 0){printf("().\n");}
+                else if(tuple_space.size() != tuple_space_size)
+                {
+                    for(int i = 0; i < tuple_space.size(); i++)
+                    {
+                        string tmp = tuple2string(tuple_space[i]);
+                        ofstream file;
+                        file.open(file_name_table[tid].c_str());
+                        file << tmp.c_str();
+                        file << "\n";
+                    }
+                }
 
-
-
+                thread_tuple = {};
                 printf("> ");
                 getline(cin, line);
                 stringstream check1(line); 
                 string intermediate; 
                 //--Parse line------------------------------------
                 check1 >> thread_no;
+                if(thread_no == "exit"){exit(0);}
                 check1 >> cmd;
                 while(check1 >> intermediate) 
                 { 
                     thread_tuple.push_back(intermediate); 
                 }
-                //--Convert thread no from str to int-------------
-                istringstream sno2no(thread_no);
-                int th_no = 0;
-                sno2no >> th_no;
-                //------------------------------------------------
                 int is_waiting = 0;
                 for(int i = 0; i < wait_cmd.size(); i++)
                 {
@@ -315,28 +345,50 @@ int main()
                     }
                 }
                 if(is_waiting){continue;}
-
                 status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer);
                 if(status != 1)
                 {
+                    printf("Execute Fail.\n");
                     struct thread_cmd w_cmd;
                     w_cmd.thread_no = thread_no;
                     w_cmd.cmd = cmd;
                     w_cmd.cmd_tuple = thread_tuple;
                     wait_cmd.push_back(w_cmd); 
                 }
+
+
+                if(tuple_space.size() == 0){printf("().\n");}
+                else if(tuple_space.size() != tuple_space_size)
+                {
+                    for(int i = 0; i < tuple_space.size(); i++)
+                    {
+                        string tmp = tuple2string(tuple_space[i]);
+                        ofstream file;
+                        file.open(file_name_table[tid].c_str());
+                        file << tmp.c_str();
+                        file << "\n";
+                    }
+                }
+
                 
-                
+                show_tuple_space(tuple_space);
+                printf("\n");
+                show_var_table(var_table);
+                printf("\n");
+                show_thcmd_buffer(wait_cmd);
             }
             else
             {
                 if(thread_rw_buffer[tid] != "")
                 {
-                    printf("Buffer Content: %s\n", thread_rw_buffer[tid].c_str());
+                    ofstream file;
+                    file.open(file_name_table[tid].c_str());
+                    file << thread_rw_buffer[tid].c_str();
+                    file << "\n";
+                    //printf("Buffer Content: %s\n", thread_rw_buffer[tid].c_str());
                     thread_rw_buffer[tid] = "";
                 }
             }
-            
         }
     }
     return 0;
