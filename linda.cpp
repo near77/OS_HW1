@@ -5,6 +5,8 @@
 #include <omp.h>
 #include <cstring>
 #include <fstream>
+#include <unistd.h>
+
 using namespace std;
 
 struct stuple
@@ -196,7 +198,7 @@ vector <string> replace_var(vector <string> thread_tuple)//Replace var with valu
 }
 
 
-int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector <string> &thread_rw_buffer)
+int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector <string> &thread_rw_buffer, omp_lock_t *lock)
 {
     thread_tuple = replace_var(thread_tuple);
     if(thread_tuple.size() == 0){return -1;}
@@ -236,7 +238,14 @@ int exec_cmd(string thread_no, string cmd, vector <string> thread_tuple, vector 
                 if(if_match)
                 {
                     string th_tuple = tuple2string(tuple_space[i]);//Convert tuple to string
+                    omp_set_lock(lock);
+                    while(thread_rw_buffer[th_no] != ""){
+                        omp_unset_lock(lock);
+                        usleep(10000);
+                        omp_set_lock(lock);
+                    };
                     thread_rw_buffer[th_no] = th_tuple;//Put tuple string in thread buffer to write file
+                    omp_unset_lock(lock);
                     if(cmd == "in")
                     {
                         tuple_space.erase(tuple_space.begin()+i);//Erase tuple space
@@ -284,8 +293,8 @@ int main()
 
     vector <string> thread_rw_buffer(thread_num+1);
     int status;
-    // omp_lock_t array_lock;
-    // omp_init_lock(&array_lock);
+    omp_lock_t array_lock;
+    omp_init_lock(&array_lock);
 
     #pragma omp parallel
     {
@@ -323,7 +332,7 @@ int main()
                     }
                 }
                 if(is_waiting){continue;}
-                status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer);
+                status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer, &array_lock);
                 if(status != 1)
                 {
                     printf("Execute Fail.\n");
@@ -339,7 +348,7 @@ int main()
                     thread_no = wait_cmd[i].thread_no;
                     cmd = wait_cmd[i].cmd;
                     thread_tuple = wait_cmd[i].cmd_tuple;
-                    status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer);
+                    status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer, &array_lock);
                     if(status == 1)
                     {
                         exe_wait_flag = 1;
@@ -400,8 +409,6 @@ int main()
                     }
                 }
                 
-
-                
                 show_tuple_space(tuple_space);
                 printf("\n");
                 show_var_table(var_table);
@@ -410,15 +417,17 @@ int main()
             }
             else
             {
+        
+                omp_set_lock(&array_lock);
                 if(thread_rw_buffer[tid] != "")
                 {
                     ofstream file;
                     file.open(file_name_table[tid].c_str(), ios::out | ios::app);
                     file << thread_rw_buffer[tid].c_str();
                     file << "\n";
-                    //printf("Buffer Content: %s\n", thread_rw_buffer[tid].c_str());
                     thread_rw_buffer[tid] = "";
                 }
+                omp_unset_lock(&array_lock);
             }
         }
     }
