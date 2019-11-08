@@ -284,6 +284,9 @@ int main()
 
     vector <string> thread_rw_buffer(thread_num+1);
     int status;
+    // omp_lock_t array_lock;
+    // omp_init_lock(&array_lock);
+
     #pragma omp parallel
     {
         while(true)
@@ -296,31 +299,6 @@ int main()
                 vector <string> thread_tuple;
 
                 int tuple_space_size = tuple_space.size();
-
-                for(int i = 0; i < wait_cmd.size(); i++)
-                {
-                    thread_no = wait_cmd[i].thread_no;
-                    cmd = wait_cmd[i].cmd;
-                    thread_tuple = wait_cmd[i].cmd_tuple;
-                    status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer);
-                    if(status == 1)
-                    {
-                        wait_cmd.erase(wait_cmd.begin()+i);
-                        i--;
-                    }
-                }
-                if(tuple_space.size() == 0){printf("().\n");}
-                else if(tuple_space.size() != tuple_space_size)
-                {
-                    for(int i = 0; i < tuple_space.size(); i++)
-                    {
-                        string tmp = tuple2string(tuple_space[i]);
-                        ofstream file;
-                        file.open(file_name_table[tid].c_str());
-                        file << tmp.c_str();
-                        file << "\n";
-                    }
-                }
 
                 thread_tuple = {};
                 printf("> ");
@@ -355,20 +333,73 @@ int main()
                     w_cmd.cmd_tuple = thread_tuple;
                     wait_cmd.push_back(w_cmd); 
                 }
-
-
-                if(tuple_space.size() == 0){printf("().\n");}
-                else if(tuple_space.size() != tuple_space_size)
+                int exe_wait_flag = 0;
+                for(int i = 0; i < wait_cmd.size(); i++)
                 {
+                    thread_no = wait_cmd[i].thread_no;
+                    cmd = wait_cmd[i].cmd;
+                    thread_tuple = wait_cmd[i].cmd_tuple;
+                    status = exec_cmd(thread_no, cmd, thread_tuple, thread_rw_buffer);
+                    if(status == 1)
+                    {
+                        exe_wait_flag = 1;
+                        wait_cmd.erase(wait_cmd.begin()+i);
+                        i--;
+                    }
+                }
+
+                if(tuple_space.size() == 0)
+                {   
+                    if(tuple_space.size() != tuple_space_size)
+                    {
+                        ofstream file;
+                        file.open(file_name_table[tid].c_str(), ios::out | ios::app);
+                        file << "()\n";
+                    }
+                    else
+                    {
+                        if(exe_wait_flag)
+                        {
+                            ofstream file;
+                            file.open(file_name_table[tid].c_str(), ios::out | ios::app);
+                            file << "()\n";
+                        }
+                    }
+                    
+                    printf("().\n");
+                }
+                else if(tuple_space.size() != tuple_space_size)
+                {   
+                    ofstream file;
+                    file.open(file_name_table[tid].c_str(), ios::out | ios::app);
+                    string tuple_space_str = "(";
                     for(int i = 0; i < tuple_space.size(); i++)
                     {
                         string tmp = tuple2string(tuple_space[i]);
+                        tuple_space_str+=tmp;
+                    }
+                    tuple_space_str += ")";
+                    file << tuple_space_str.c_str();
+                    file << "\n";
+                }
+                else
+                {
+                    if(exe_wait_flag)
+                    {
                         ofstream file;
-                        file.open(file_name_table[tid].c_str());
-                        file << tmp.c_str();
+                        file.open(file_name_table[tid].c_str(), ios::out | ios::app);
+                        string tuple_space_str = "(";
+                        for(int i = 0; i < tuple_space.size(); i++)
+                        {
+                            string tmp = tuple2string(tuple_space[i]);
+                            tuple_space_str+=tmp;
+                        }
+                        tuple_space_str += ")";
+                        file << tuple_space_str.c_str();
                         file << "\n";
                     }
                 }
+                
 
                 
                 show_tuple_space(tuple_space);
@@ -382,7 +413,7 @@ int main()
                 if(thread_rw_buffer[tid] != "")
                 {
                     ofstream file;
-                    file.open(file_name_table[tid].c_str());
+                    file.open(file_name_table[tid].c_str(), ios::out | ios::app);
                     file << thread_rw_buffer[tid].c_str();
                     file << "\n";
                     //printf("Buffer Content: %s\n", thread_rw_buffer[tid].c_str());
