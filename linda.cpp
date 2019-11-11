@@ -385,6 +385,10 @@ int main()
                     for(int i = 0; i < tuple_space.size(); i++)
                     {
                         string tmp = tuple2string(tuple_space[i]);
+                        if(i != 0)
+                        {
+                            tuple_space_str+=",";
+                        }
                         tuple_space_str+=tmp;
                     }
                     tuple_space_str += ")";
@@ -401,6 +405,10 @@ int main()
                         for(int i = 0; i < tuple_space.size(); i++)
                         {
                             string tmp = tuple2string(tuple_space[i]);
+                            if(i != 0)
+                            {
+                                tuple_space_str+=",";
+                            }
                             tuple_space_str+=tmp;
                         }
                         tuple_space_str += ")";
